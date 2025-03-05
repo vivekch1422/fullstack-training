@@ -1,0 +1,22 @@
+async function findSecondLargest(arr) {
+    if (arr.length < 2) {
+        console.warn("Array must have at least two numbers.");
+        return -1; 
+    }
+
+    let sortedArr = [...new Set(arr)].sort((a, b) => b - a); 
+
+    if (sortedArr.length < 2) {
+        console.warn("No second largest number found.");
+        return -1; 
+    }
+
+    return sortedArr[1]; 
+}
+
+// Example of the problem statement
+(async () => {
+    let numbers = [2, 6, 9, 5]; // 
+    let result = await findSecondLargest(numbers);
+    console.log("Second largest number:", result); 
+})();
