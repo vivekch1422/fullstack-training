@@ -1,0 +1,658 @@
+//Hack.js 
+
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
+import SearchForm from './components/SearchForm';
+import UserTable from './components/UserTable';
+import AddUserPopup from './components/AddUserPopup';
+import BulkAdd from './components/BulkAdd';
+import { Button, Box, Typography } from '@mui/material';
+
+function Hack() {
+  const [users, setUsers] = useState([]);
+  const [showAddPopup, setShowAddPopup] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const fetchUsers = async () => {
+    try {
+      const res = await axios.get('http://localhost:8080/users');
+      setUsers(res.data);
+    } catch (err) {
+      console.error('Error fetching users:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Box sx={{ padding: 3, backgroundColor: '#f3f6f9', minHeight: '100vh' }}>
+      <Typography variant="h4" fontWeight={600} gutterBottom>
+        User Management
+      </Typography>
+      <SearchForm setUsers={setUsers} />
+
+      {loading ? (
+        <p>Loading users...</p>
+      ) : (
+        <>
+          <UserTable users={users} setUsers={setUsers} />
+          <Box mt={2} display="flex" gap={2}>
+            <Button variant="contained" color="primary" onClick={() => setShowAddPopup(true)}>
+              Add User
+            </Button>
+            <BulkAdd setUsers={setUsers} />
+          </Box>
+        </>
+      )}
+
+      {showAddPopup && (
+        <AddUserPopup closePopup={() => setShowAddPopup(false)} setUsers={setUsers} />
+      )}
+    </Box>
+  );
+}
+
+export default Hack;
+
+
+//AddUserPopup
+import React, { useState } from 'react';
+import axios from 'axios';
+import {
+  Dialog, DialogTitle, DialogContent, TextField, Button, Grid, Typography, DialogActions
+} from '@mui/material';
+
+const initialForm = {
+  firstName: '', lastName: '', middleName: '', city: '',
+  state: '', country: '', zip: '', ssn: '', phnNum: ''
+};
+
+const AddUserPopup = ({ closePopup, setUsers }) => {
+  const [formData, setFormData] = useState(initialForm);
+  const [error, setError] = useState('');
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+    setError('');
+  };
+
+  const handleAdd = async () => {
+    if (!formData.firstName || !formData.ssn) {
+      setError('First Name and SSN are required');
+      return;
+    }
+
+    try {
+      const res = await axios.post('http://localhost:8080/users', formData);
+      setUsers(prev => [...prev, res.data]);
+      closePopup();
+    } catch (err) {
+      console.error('Add user error:', err);
+      setError('Failed to add user. Please try again.');
+    }
+  };
+
+  return (
+    <Dialog open={true} onClose={closePopup} maxWidth="sm" fullWidth>
+      <DialogTitle>Add New User</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" color="textSecondary" mb={2}>
+          Please fill in the user details.
+        </Typography>
+        <Grid container spacing={2} mt={1}>
+          {Object.keys(initialForm).map((key) => (
+            <Grid item xs={12} sm={6} key={key}>
+              <TextField
+                fullWidth
+                name={key}
+                label={key}
+                value={formData[key]}
+                onChange={handleChange}
+                required={key === 'firstName' || key === 'ssn'}
+              />
+            </Grid>
+          ))}
+        </Grid>
+        {error && <Typography color="error" mt={2}>{error}</Typography>}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={closePopup} color="secondary" variant="outlined">Cancel</Button>
+        <Button onClick={handleAdd} color="primary" variant="contained">Add</Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+export default AddUserPopup;
+
+
+//BulkAdd
+import React, { useState } from 'react';
+import axios from 'axios';
+import {
+  Button, Dialog, DialogTitle, DialogContent, DialogActions,
+  TextField, Box, Grid, Typography
+} from '@mui/material';
+
+const initialUser = {
+  firstName: '', lastName: '', middleName: '', city: '',
+  state: '', country: '', zip: '', ssn: '', phnNum: ''
+};
+
+const BulkAdd = ({ setUsers }) => {
+  const [open, setOpen] = useState(false);
+  const [users, setUsersLocal] = useState([{ ...initialUser }]);
+  const [error, setError] = useState('');
+
+  const handleOpen = () => setOpen(true);
+
+  const handleClose = () => {
+    setOpen(false);
+    setUsersLocal([{ ...initialUser }]);
+    setError('');
+  };
+
+  const handleUserChange = (index, field, value) => {
+    const updatedUsers = [...users];
+    updatedUsers[index] = { ...updatedUsers[index], [field]: value };
+    setUsersLocal(updatedUsers);
+  };
+
+  const handleSubmit = async () => {
+    const usersToAdd = users.filter(user =>
+      Object.values(user).some(val => val !== '')
+    );
+
+    if (usersToAdd.length === 0) {
+      setError('Please add at least one user');
+      return;
+    }
+
+    try {
+      const res = await axios.post('http://localhost:8080/users/bulk', usersToAdd);
+      setUsers(prev => [...prev, ...res.data]);
+      handleClose();
+    } catch (err) {
+      console.error('Bulk add error:', err);
+      setError(err.response?.data?.message || 'Failed to add users. Please try again.');
+    }
+  };
+
+  const handleAddAnotherUser = () => {
+    setUsersLocal([...users, { ...initialUser }]);
+  };
+
+  return (
+    <>
+      <Button variant="contained" color="success" onClick={handleOpen}>
+        Bulk Add
+      </Button>
+
+      <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
+        <DialogTitle>Bulk Add Users</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="textSecondary" mb={2}>
+            Fill in details for one or more users.
+          </Typography>
+
+          <Box sx={{ maxHeight: '60vh', overflow: 'auto' }}>
+            {users.map((user, index) => (
+              <Box
+                key={index}
+                mb={3}
+                p={2}
+                sx={{
+                  border: '1px solid #ddd',
+                  borderRadius: 2,
+                  background: '#fefefe',
+                  boxShadow: 1
+                }}
+              >
+                <Typography variant="subtitle1" gutterBottom>User {index + 1}</Typography>
+                <Grid container spacing={2}>
+                  {Object.keys(initialUser).map((field) => (
+                    <Grid item xs={12} sm={6} key={field}>
+                      <TextField
+                        label={field}
+                        value={user[field]}
+                        onChange={(e) => handleUserChange(index, field, e.target.value)}
+                        fullWidth
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
+              </Box>
+            ))}
+          </Box>
+
+          {error && <Typography color="error" mt={1}>{error}</Typography>}
+
+          <Button
+            onClick={handleAddAnotherUser}
+            sx={{ mt: 2 }}
+            variant="outlined"
+          >
+            Add Another User
+          </Button>
+        </DialogContent>
+
+        <DialogActions>
+          <Button onClick={handleClose} color="secondary" variant="outlined">Cancel</Button>
+          <Button variant="contained" onClick={handleSubmit}>Add Users</Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+};
+
+export default BulkAdd;
+
+
+
+
+
+
+//EditPopup
+import React, { useState } from 'react';
+import axios from 'axios';
+import {
+  Dialog, DialogTitle, DialogContent, TextField, Button,
+  Grid, Typography, DialogActions
+} from '@mui/material';
+
+const EditPopup = ({ user, closePopup, setUsers }) => {
+  const [formData, setFormData] = useState(user);
+  const originalSSN = user.ssn; // Save old SSN for tracking
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSave = async () => {
+    try {
+      const res = await axios.put(`http://localhost:8080/users/${originalSSN}`, formData);
+      setUsers(prev =>
+        prev.map(u => u.ssn === originalSSN ? res.data : u)
+      );
+      closePopup();
+    } catch (err) {
+      console.error('Edit error:', err);
+    }
+  };
+
+  return (
+    <Dialog open={true} onClose={closePopup} maxWidth="sm" fullWidth>
+      <DialogTitle>Edit User</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" color="textSecondary" mb={2}>
+          Update user information below.
+        </Typography>
+        <Grid container spacing={2} mt={1}>
+          {Object.entries(formData).map(([key, value]) => (
+            <Grid item xs={12} sm={6} key={key}>
+              <TextField
+                fullWidth
+                name={key}
+                label={key}
+                value={value}
+                onChange={handleChange}
+              />
+            </Grid>
+          ))}
+        </Grid>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={closePopup} color="secondary" variant="outlined">Cancel</Button>
+        <Button onClick={handleSave} color="primary" variant="contained">Save</Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+export default EditPopup;
+
+
+
+//SearchForm
+import React, { useState } from 'react';
+import { TextField, Button, Grid, Paper } from '@mui/material';
+import axios from 'axios';
+
+const SearchForm = ({ setUsers }) => {
+  const [searchData, setSearchData] = useState({
+    firstName: '', lastName: '', middleName: '', city: '',
+    state: '', country: '', zip: '', ssn: '', phnNum: ''
+  });
+
+  const handleChange = (e) => {
+    setSearchData({ ...searchData, [e.target.name]: e.target.value });
+  };
+
+  const handleSearch = async () => {
+    const searchParams = Object.fromEntries(
+      Object.entries(searchData).filter(([_, value]) => value !== '')
+    );
+
+    try {
+      const res = await axios.post('http://localhost:8080/users/search', searchParams);
+      setUsers(res.data);
+    } catch (err) {
+      console.error('Search error:', err);
+      alert('Search failed. Please try again.');
+    }
+  };
+
+  const isSearchDisabled = Object.values(searchData).every(val => val === '');
+
+  return (
+    <Paper sx={{ p: 2, mb: 2 }}>
+      <Grid container spacing={2}>
+        {Object.keys(searchData).map((key) => (
+          <Grid item xs={12} sm={4} md={3} key={key}>
+            <TextField
+              label={key}
+              name={key}
+              value={searchData[key]}
+              onChange={handleChange}
+              fullWidth
+            />
+          </Grid>
+        ))}
+        <Grid item xs={12}>
+          <Button
+            variant="contained"
+            onClick={handleSearch}
+            disabled={isSearchDisabled}
+          >
+            Search
+          </Button>
+        </Grid>
+      </Grid>
+    </Paper>
+  );
+};
+
+export default SearchForm;
+
+
+//UserTable
+
+import React, { useState } from 'react';
+import {
+  Table, TableBody, TableCell, TableContainer,
+  TableHead, TableRow, Paper, IconButton, Stack
+} from '@mui/material';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import axios from 'axios';
+
+import ViewPopup from './ViewPopup';
+import EditPopup from './EditPopup';
+
+const UserTable = ({ users, setUsers }) => {
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [editUser, setEditUser] = useState(null);
+
+  const handleDelete = async (ssn) => {
+    try {
+      await axios.delete(`http://localhost:8080/users/${ssn}`);
+      setUsers(users.filter(u => u.ssn !== ssn));
+    } catch (err) {
+      console.error('Delete error:', err);
+    }
+  };
+
+  return (
+    <>
+      <TableContainer component={Paper} sx={{ my: 2, boxShadow: 2, borderRadius: 2 }}>
+        <Table>
+          <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
+            <TableRow>
+              <TableCell><b>First Name</b></TableCell>
+              <TableCell><b>City</b></TableCell>
+              <TableCell><b>SSN</b></TableCell>
+              <TableCell><b>Phone</b></TableCell>
+              <TableCell><b>Actions</b></TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {users.map((user, index) => (
+              <TableRow
+                key={user.ssn}
+                sx={{
+                  backgroundColor: index % 2 === 0 ? '#fafafa' : '#fff',
+                  '&:hover': { backgroundColor: '#e3f2fd' }
+                }}
+              >
+                <TableCell>{user.firstName}</TableCell>
+                <TableCell>{user.city}</TableCell>
+                <TableCell>{user.ssn}</TableCell>
+                <TableCell>{user.phnNum}</TableCell>
+                <TableCell>
+                  <Stack direction="row" spacing={1}>
+                    <IconButton onClick={() => setSelectedUser(user)}>
+                      <VisibilityIcon color="primary" />
+                    </IconButton>
+                    <IconButton onClick={() => setEditUser(user)}>
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton onClick={() => handleDelete(user.ssn)}>
+                      <DeleteIcon color="error" />
+                    </IconButton>
+                  </Stack>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      {selectedUser && (
+        <ViewPopup user={selectedUser} closePopup={() => setSelectedUser(null)} />
+      )}
+      {editUser && (
+        <EditPopup user={editUser} closePopup={() => setEditUser(null)} setUsers={setUsers} />
+      )}
+    </>
+  );
+};
+
+export default UserTable;
+
+
+//ViewPopup 
+
+import React from 'react';
+import {
+  Dialog, DialogTitle, DialogContent,
+  List, ListItem, ListItemText, Button, Typography
+} from '@mui/material';
+
+const formatLabel = (label) =>
+  label.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+
+const ViewPopup = ({ user, closePopup }) => {
+  return (
+    <Dialog open={true} onClose={closePopup} maxWidth="sm" fullWidth
+      PaperProps={{ sx: { p: 2, borderRadius: 2, backgroundColor: '#f9f9f9' } }}
+    >
+      <DialogTitle>User Details</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" color="textSecondary" gutterBottom>
+          This is a read-only view of the user's information.
+        </Typography>
+        <List>
+          {Object.entries(user).map(([key, value]) => (
+            <ListItem key={key} divider sx={{ py: 1.5 }}>
+              <ListItemText
+                primaryTypographyProps={{ fontWeight: 500, color: 'text.secondary' }}
+                secondaryTypographyProps={{ fontSize: '15px' }}
+                primary={formatLabel(key)}
+                secondary={value || '—'}
+              />
+            </ListItem>
+          ))}
+        </List>
+        <Button
+          onClick={closePopup}
+          variant="contained"
+          fullWidth
+          sx={{ mt: 2 }}
+        >
+          Close
+        </Button>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+export default ViewPopup;
+
+
+//APi
+
+const express = require('express');
+const cors = require('cors');
+const app = express();
+const port = 8080;
+
+
+app.use(cors());
+app.use(express.json());
+
+let users = [
+    {
+        "firstName": "John",
+        "lastName": "Doe",
+        "middleName": "A",
+        "city": "New York",
+        "state": "NY",
+        "country": "USA",
+        "zip": "10001",
+        "ssn": "123-45-6789",
+        "phnNum": "555-1234"
+    },
+    {
+        "firstName": "Jane",
+        "lastName": "Smith",
+        "middleName": "B",
+        "city": "Los Angeles",
+        "state": "CA",
+        "country": "USA",
+        "zip": "90001",
+        "ssn": "987-65-4321",
+        "phnNum": "555-5678"
+    },
+    {
+        "firstName": "Alice",
+        "lastName": "Johnson",
+        "middleName": "C",
+        "city": "Chicago",
+        "state": "IL",
+        "country": "USA",
+        "zip": "60601",
+        "ssn": "111-22-3333",
+        "phnNum": "555-8765"
+    },
+    {
+        "firstName": "Bob",
+        "lastName": "Brown",
+        "middleName": "D",
+        "city": "Houston",
+        "state": "TX",
+        "country": "USA",
+        "zip": "77001",
+        "ssn": "444-55-6666",
+        "phnNum": "555-4321"
+    }
+];
+
+// Create a new user
+app.post('/users', (req, res) => {
+    const user = req.body;
+    users.push(user);
+    res.status(201).send(user);
+});
+
+// Read all users
+app.get('/users', (req, res) => {
+    res.send(users);
+});
+
+// Read a single user by SSN
+app.get('/users/:ssn', (req, res) => {
+    const user = users.find(u => u.ssn === req.params.ssn);
+    if (user) {
+        res.send(user);
+    } else {
+        res.status(404).send({ message: 'User not found' });
+    }
+});
+
+// Update a user by SSN
+app.put('/users/:ssn', (req, res) => {
+    const index = users.findIndex(u => u.ssn === req.params.ssn);
+    if (index !== -1) {
+        users[index] = req.body;
+        res.send(users[index]);
+    } else {
+        res.status(404).send({ message: 'User not found' });
+    }
+});
+
+// Delete a user by SSN
+app.delete('/users/:ssn', (req, res) => {
+    const index = users.findIndex(u => u.ssn === req.params.ssn);
+    if (index !== -1) {
+        const deletedUser = users.splice(index, 1);
+        res.send(deletedUser);
+    } else {
+        res.status(404).send({ message: 'User not found' });
+    }
+});
+
+app.post('/users/search', (req, res) => {
+    const searchCriteria = req.body;
+    const filteredUsers = users.filter(user => {
+        return Object.keys(searchCriteria).some(key => {
+            return user[key] && user[key].toString().toLowerCase().includes(searchCriteria[key].toString().toLowerCase());
+        });
+    });
+    res.send(filteredUsers);
+});
+
+app.post('/users/bulk', (req, res) => {
+    try {
+        const usersToAdd = req.body;
+        console.log("Received in bulk:", usersToAdd); // 👈 ADD THIS LINE
+
+        if (!Array.isArray(usersToAdd)) {
+            return res.status(400).send({ message: 'Expected an array of users' });
+        }
+
+        const validUsers = usersToAdd.filter(user =>
+            user.firstName && user.ssn
+        );
+
+        if (validUsers.length === 0) {
+            return res.status(400).send({ message: 'No valid users found (missing firstName or ssn)' });
+        }
+
+        users.push(...validUsers);
+        res.status(201).send(validUsers);
+    } catch (err) {
+        console.error('Bulk insert error:', err);
+        res.status(500).send({ message: 'Internal server error' });
+    }
+});
+
+
+
+app.listen(port, () => {
+    console.log(`Server is running on http://localhost:${port}`);
+});
